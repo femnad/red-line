@@ -1,0 +1,135 @@
+#!/bin/bash
+pid=$$
+pidfile=/tmp/red-line.pid
+config_file=$HOME/.redline
+
+if [ ! -f $config_file ]; then
+    cat > $config_file << EOF
+normal-sleep=60
+warning-sleep=5
+warning-percent=10
+critical-percent=3
+critical-action=shutdown
+critical-countdown=15
+notify=dzen
+dzen-display-time=5
+dzen-warning-fg=#808080
+dzen-warning-bg=black
+dzen-critical-fg=white
+dzen-critical-bg=#8b0000
+EOF
+fi
+
+function cleanup {
+    if [ -f $pidfile ]
+    then
+        rm $pidfile
+    fi
+    exit
+}
+
+function get_option {
+    option=$1
+    value=$(echo -e "$config_file_content" | grep $option | awk -F '=' '{print $2}' | tr -d [:blank:])
+    echo $value
+}
+
+function read_options {
+    config_file_content="$(cat $config_file)"
+    action=$(get_option critical-action)
+    countdown=$(get_option critical-countdown)
+    warning=$(get_option warning-percent)
+    critical=$(get_option critical-percent)
+    normal_sleep=$(get_option normal-sleep)
+    warning_sleep=$(get_option warning-sleep)
+    notify_type=$(get_option notify)
+    dzen_display_time=$(get_option dzen-display-time)
+    dzen_warning_fg=$(get_option dzen-warning-fg)
+    dzen_warning_bg=$(get_option dzen-warning-bg)
+    dzen_critical_fg=$(get_option dzen-critical-fg)
+    dzen_critical_bg=$(get_option dzen-critical-bg)
+}
+
+trap "cleanup" SIGINT SIGTERM
+
+trap "read_options" SIGHUP
+
+if [ -f $pidfile ]
+then
+    echo 'red-line seems to be running already'
+    exit
+fi
+echo $pid > $pidfile
+
+function get_battery_state {
+    echo $(acpi | awk '{print $3}' | awk -F ',' '{print $1}')
+}
+
+discharging="Discharging"
+full="Full"
+suspend_command="systemctl suspend"
+shutdown_command="systemctl poweroff"
+unknown="Unknown"
+
+read_options
+
+if [[ "$notify_type" == "libnotify" ]]; then
+    function warning_notify {
+        notify-send -u normal "$1" "$2"
+    }
+    function critical_notify {
+        notify-send -u critical "$1" "$2"
+    }
+else
+    function dzen_notify {
+        eval 'echo "$1: $2" | dzen2 -p $dzen_display_time -geometry 330x30-350+10 -xs 1 -fg "$3" -bg "$4"'
+    }
+    function warning_notify {
+        dzen_notify "$1" "$2" $dzen_warning_fg $dzen_warning_bg
+    }
+    function critical_notify {
+        dzen_notify "$1" "$2" $dzen_critical_fg $dzen_critical_bg
+    }
+fi
+
+while true; do
+    batt=$(acpi | egrep -o '[0-9]+%' | egrep -o '[0-9]+')
+    state=$(get_battery_state)
+    if [[ "$batt" -le "$warning" && $state == "$discharging" ]]; then
+        warning_notify "Battery Low" "$batt%"
+        if [[ "$batt" -le "$critical" ]]
+        then
+            case $action in
+                suspend|shutdown)
+                    for i in $(seq 0 10)
+                    do
+                        critical_notify "Will $action in" "$(expr $countdown - $i)"
+                    done
+                    if [[ "$(get_battery_state)" == "$discharging" ]]; then
+                    case $action in
+                        suspend)
+                            eval $suspend_command
+                            ;;
+                        shutdown)
+                            eval $shutdown_command
+                            ;;
+                    esac
+                    fi
+                    ;;
+                *)
+                    ;;
+            esac
+        fi
+        sleep $warning_sleep
+    else
+        case $state in
+            $full)
+                notify "Battery Full" "Adapter Away!"
+                ;;
+            $unknown)
+                notify "Battery Full?" "At $batt%"
+                ;;
+        esac
+        sleep $normal_sleep
+    fi
+done
