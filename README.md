@@ -11,7 +11,7 @@ Usage
 
 Just run red-line. Backgrounding the process is manual for your inconvenience:
 
-red-line &
+    red-line &
 
 Configuration
 -------------
