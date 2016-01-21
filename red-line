@@ -101,7 +101,7 @@ while true; do
         then
             case $action in
                 suspend|shutdown)
-                    for i in $(seq 0 10)
+                    for i in $(seq 0 $countdown)
                     do
                         critical_notify "Will $action in" "$(expr $countdown - $i)"
                     done
