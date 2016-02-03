@@ -13,6 +13,8 @@ critical-action=shutdown
 critical-countdown=15
 notify=dzen
 dzen-display-time=5
+dzen-info-fg=black
+dzen-info-bg=#808080
 dzen-warning-fg=#808080
 dzen-warning-bg=black
 dzen-critical-fg=white
@@ -44,6 +46,8 @@ function read_options {
     warning_sleep=$(get_option warning-sleep)
     notify_type=$(get_option notify)
     dzen_display_time=$(get_option dzen-display-time)
+    dzen_info_fg=$(get_option dzen-info-fg)
+    dzen_info_bg=$(get_option dzen-info-bg)
     dzen_warning_fg=$(get_option dzen-warning-fg)
     dzen_warning_bg=$(get_option dzen-warning-bg)
     dzen_critical_fg=$(get_option dzen-critical-fg)
@@ -74,6 +78,9 @@ unknown="Unknown"
 read_options
 
 if [[ "$notify_type" == "libnotify" ]]; then
+    function info_notify {
+        notify-send -u low "$1" "$2"
+    }
     function warning_notify {
         notify-send -u normal "$1" "$2"
     }
@@ -83,6 +90,9 @@ if [[ "$notify_type" == "libnotify" ]]; then
 else
     function dzen_notify {
         eval 'echo "$1: $2" | dzen2 -p $dzen_display_time -geometry 330x30-350+10 -xs 1 -fg "$3" -bg "$4"'
+    }
+    function info_notify {
+        dzen_notify "$1" "$2" $dzen_info_fg $dzen_info_bg
     }
     function warning_notify {
         dzen_notify "$1" "$2" $dzen_warning_fg $dzen_warning_bg
@@ -124,10 +134,10 @@ while true; do
     else
         case $state in
             $full)
-                notify "Battery Full" "Adapter Away!"
+                info_notify "Battery Full" "Adapter Away!"
                 ;;
             $unknown)
-                notify "Battery Full?" "At $batt%"
+                info_notify "Battery Full?" "At $batt%"
                 ;;
         esac
         sleep $normal_sleep
