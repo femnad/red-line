@@ -137,7 +137,7 @@ while true; do
                 info_notify "Battery Full" "Adapter Away!"
                 ;;
             $unknown)
-                info_notify "Battery Full?" "At $batt%"
+                info_notify "Battery Charging Transition" "At $batt%"
                 ;;
         esac
         sleep $normal_sleep
