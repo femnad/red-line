@@ -75,6 +75,16 @@ suspend_command="systemctl suspend"
 shutdown_command="systemctl poweroff"
 unknown="Unknown"
 
+function is_discharging {
+    state=$(get_battery_state)
+    if [[ "$state" == "$discharging" ]]
+    then
+        echo "true"
+    else
+        echo "false"
+    fi
+}
+
 read_options
 
 if [[ "$notify_type" == "libnotify" ]]; then
@@ -104,8 +114,7 @@ fi
 
 while true; do
     batt=$(acpi | egrep -o '[0-9]+%' | egrep -o '[0-9]+')
-    state=$(get_battery_state)
-    if [[ "$batt" -le "$warning" && $state == "$discharging" ]]; then
+    if [[ "$(is_discharging)" == "true" && "$batt" -le "$warning" ]]; then
         warning_notify "Battery Low" "$batt%"
         if [[ "$batt" -le "$critical" ]]
         then
@@ -114,8 +123,12 @@ while true; do
                     for i in $(seq 0 $countdown)
                     do
                         critical_notify "Will $action in" "$(expr $countdown - $i)"
+                        if [[ "$(is_discharging)" == "false" ]]; then
+                            info_notify "Phew" "Started charging"
+                            break
+                        fi
                     done
-                    if [[ "$(get_battery_state)" == "$discharging" ]]; then
+                    if [[ "$(is_discharging)" == "true" ]]; then
                     case $action in
                         suspend)
                             eval $suspend_command
@@ -132,6 +145,7 @@ while true; do
         fi
         sleep $warning_sleep
     else
+        state=$(get_battery_state)
         case $state in
             $full)
                 info_notify "Battery Full" "Adapter Away!"
