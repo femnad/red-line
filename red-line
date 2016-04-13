@@ -4,7 +4,6 @@ set -eu
 pid=$$
 pidfile=/tmp/red-line.pid
 config_file=$HOME/.redline
-MESSAGE_TIMEOUT=1
 
 if [ ! -f $config_file ]; then
     cat > $config_file << EOF
@@ -13,7 +12,7 @@ warning-sleep=5
 warning-percent=10
 critical-percent=3
 critical-action=shutdown
-critical-countdown=15
+critical-countdown=10
 EOF
 fi
 
@@ -34,11 +33,11 @@ function get_option {
 function read_options {
     config_file_content="$(cat $config_file)"
     action=$(get_option critical-action)
-    countdown=$(get_option critical-countdown)
     warning=$(get_option warning-percent)
     critical=$(get_option critical-percent)
     normal_sleep=$(get_option normal-sleep)
     warning_sleep=$(get_option warning-sleep)
+    critical_countdown=$(get_option critical-countdown)
 }
 
 trap "cleanup" SIGINT SIGTERM
@@ -74,80 +73,70 @@ function is_discharging {
 
 read_options
 
-function _notify_progress {
-    summary="$1"
-    progress=$2
-    urgency=$3
-    notify-send -u $urgency -h int:value:$progress -t $MESSAGE_TIMEOUT "$1"
-}
-
-function info_notify_progress {
-    _notify_progress "$1" $2 low
-}
-
-function warning_notify_progress {
-    _notify_progress "$1" $2 normal
-}
-
-function critical_notify_progress {
-    _notify_progress "$1" $2 critical
-}
-
-function _notify_message {
+function _notify {
     summary="$1"
     message="$2"
     urgency=$3
-    notify-send -u $urgency "$summary" "$message"
+    notify-send -u $urgency "$summary" "$message" -t $warning_sleep
 }
 
-function info_notify_message {
-    _notify_message "$1" "$2" info
+function info_notify {
+    _notify "$1" "$2" low
 }
 
-function critical_notify_message {
-    _notify_message "$1" "$2" critical
+function warning_notify {
+    _notify "$1" "$2" normal
+}
+
+function critical_notify {
+    _notify "$1" "$2" critical
 }
 
 while true; do
     batt=$(acpi | egrep -o '[0-9]+%' | egrep -o '[0-9]+')
-    if [[ "$(is_discharging)" == "true" && "$batt" -le "$warning" ]]; then
-        warning_notify_progress "Battery Low" $batt
+    if [[ "$(is_discharging)" == "true" ]]
+    then
         if [[ "$batt" -le "$critical" ]]
         then
             case $action in
                 suspend|shutdown)
-                    for i in $(seq 0 $countdown)
+                    for i in $(seq 0 $critical_countdown)
                     do
-                        critical_notify_message "Will $action in" "$(expr $countdown - $i)"
+                        critical_notify "Battery critical, $action imminent" "$(expr $critical_countdown - $i)"
                         if [[ "$(is_discharging)" == "false" ]]; then
-                            info_notify_message "Phew" "Started charging"
+                            info_notify "Phew" "Started charging"
                             break
                         fi
+                        sleep $warning_sleep
                     done
                     if [[ "$(is_discharging)" == "true" ]]; then
-                    case $action in
-                        suspend)
-                            eval $suspend_command
-                            ;;
-                        shutdown)
-                            eval $shutdown_command
-                            ;;
-                    esac
+                        case $action in
+                            suspend)
+                                eval $suspend_command
+                                ;;
+                            shutdown)
+                                eval $shutdown_command
+                                ;;
+                        esac
                     fi
                     ;;
                 *)
+                    critical_notify "Battery Critical" "$batt%"
                     ;;
             esac
+        elif [[ "$batt" -le "$warning" ]]
+        then
+            warning_notify "Battery Low" "$batt%"
         fi
         sleep $warning_sleep
     else
         state=$(get_battery_state)
         case $state in
             $full)
-                info_notify_message "Battery Full" "Adapter Away!"
+                info_notify "Battery Full" "Adapter Away!"
                 ;;
             $unknown)
-                info_notify_message "Battery Charging Transition" "At $batt%"
+                info_notify "Battery Charging Transition" "At $batt%"
                 ;;
         esac
         sleep $normal_sleep
