@@ -11,7 +11,7 @@ normal-sleep=60
 warning-sleep=5
 warning-percent=10
 critical-percent=3
-critical-action=shutdown
+critical-action=poweroff
 critical-countdown=10
 EOF
 fi
@@ -97,7 +97,7 @@ while true; do
         if [[ "$batt" -le "$critical" ]]
         then
             case $action in
-                suspend|shutdown|hibernate)
+                suspend|poweroff|hibernate)
                     for i in $(seq 0 $critical_countdown)
                     do
                         critical_notify "Battery critical, $action imminent" "$(expr $critical_countdown - $i)"
