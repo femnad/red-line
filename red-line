@@ -57,8 +57,6 @@ function get_battery_state {
 
 discharging="Discharging"
 full="Full"
-suspend_command="systemctl suspend"
-shutdown_command="systemctl poweroff"
 unknown="Unknown"
 
 function is_discharging {
@@ -99,7 +97,7 @@ while true; do
         if [[ "$batt" -le "$critical" ]]
         then
             case $action in
-                suspend|shutdown)
+                suspend|shutdown|hibernate)
                     for i in $(seq 0 $critical_countdown)
                     do
                         critical_notify "Battery critical, $action imminent" "$(expr $critical_countdown - $i)"
@@ -110,14 +108,7 @@ while true; do
                         sleep $warning_sleep
                     done
                     if [[ "$(is_discharging)" == "true" ]]; then
-                        case $action in
-                            suspend)
-                                eval $suspend_command
-                                ;;
-                            shutdown)
-                                eval $shutdown_command
-                                ;;
-                        esac
+                        eval "systemctl $action"
                     fi
                     ;;
                 *)
